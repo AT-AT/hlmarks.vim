@@ -38,3 +38,7 @@ Icon
 # Installed Gems
 vendor/bundle/*
 
+# Auto Generated Tag file
+tags
+tags-ja
+

@@ -355,6 +355,10 @@ For the format of the help file, referring to the following project.
 ==============================================================================
 CHANGELOG                                                  *hlmarks-changelog*
 
+2021/10/25  version 0.6~
+    + Fix gitignore to exclude tag file.
+    + Fix pattern for matching data line in a bundle.
+    + Fix some comments and typo.
 2015/07/08  version 0.5~
     + Change defined user command according to state of plug-in.
     + Add tests.
