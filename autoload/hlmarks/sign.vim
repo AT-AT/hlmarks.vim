@@ -533,7 +533,8 @@ endfunction
 " Params: [Number] buffer_no: target buffer number
 " Return: [String] bundle that contains placed signs
 " Note:   Bundle has format as follows.
-"           - Data line => '_line={no}_id={id}_name={name}' ('_' is \s+)
+"           - Data line format:
+"               ^\s+(Line-No=NO)\s+(Id=ID)\s+(Name=NAME)\s+(Other=VALUE)*$
 "           - Grouped by each line-no.
 "           - In group of line-no, ordered by 'placed last->first'.
 "
