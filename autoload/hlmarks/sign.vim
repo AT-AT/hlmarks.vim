@@ -287,7 +287,8 @@ function! s:extract_sign_ids(bundle, pattern)
       continue
     endif
 
-    let matched = matchlist(crumb, '\v^\s+\S+\=(\d+)\s+\S+\=(\d+)\s+\S+\=(\S+)$')
+    " See sign_bundle() for the data-line format in a bundle.
+    let matched = matchlist(crumb, '\v^\s+\S+\=(\d+)\s+\S+\=(\d+)\s+\S+\=(\S+)')
     if !empty(matched) && match(matched[3], a:pattern) >= 0
       call add(sign_ids, str2nr(matched[2], 10))
     endif
@@ -330,7 +331,8 @@ function! s:extract_sign_specs(bundle, line_no, pattern)
       continue
     endif
 
-    let matched = matchlist(crumb, '\v^\s+\S+\=(\d+)\s+\S+\=(\d+)\s+\S+\=(\S+)$')
+    " See sign_bundle() for the data-line format in a bundle.
+    let matched = matchlist(crumb, '\v^\s+\S+\=(\d+)\s+\S+\=(\d+)\s+\S+\=(\S+)')
     if empty(matched) || (a:line_no != 0 && matched[1] != a:line_no)
       continue
     endif
