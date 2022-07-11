@@ -23,97 +23,209 @@ function! s:Local(subject)
 endfunction
 
 
-function! s:prepare_mark(...)
-  let param = a:0 ? a:1 : {'c': ['a', 'A'], 'o': ['b', 'B']}
-  let fix_lno = a:0 == 2 ? 1 : 0
+function! s:purge_mark()
+  let marks = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789^.<>[]\"'
+  execute 'delmarks '.marks
+endfunction
 
-  if type(param) == type(1) && param == 0
-    let mark_str = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.^<>[]"'
-    execute 'delmarks '.mark_str
-    quit!
-    execute 'delmarks '.mark_str
-    return {}
-  endif
 
-  " Origin buffer number always becomes '2' if add one buffer. DO NOT use winnr(|#|$) 
-  let other_wno = 2
-  let other_bno = bufnr('%')
-  let other_spec = {}
-  let line_no = 1
-  for name in param['o']
-    put =['']
-    call cursor(line_no, 1)
-    execute 'normal m'.name
-    let other_spec[name] = line_no
-    if !fix_lno
-      let line_no += 1
-    endif
-  endfor
+function! s:win_id()
+  " Available on Vim>=8.0.
+  return win_getid()
+endfunction
 
+
+function! s:activate_win(win_id)
+  " Available on Vim>=8.0.
+  return win_gotoid(a:win_id)
+endfunction
+
+
+function! s:add_buffer()
   new
+  return s:win_id()
+endfunction
 
-  " Newly buffer number always becomes '1' if add one buffer. DO NOT use winnr(|#|$) 
-  let current_wno = 1
-  let current_bno = bufnr('%')
-  let current_spec = {}
+
+" Generate ^,. marks. (See README about the mark detail)
+function! s:generate_automated_mark()
   let line_no = 1
-  for name in param['c']
-    put =['']
-    call cursor(line_no, 1)
+  call cursor(line_no, 1)
+  " This invocation sets ^,. on line_no.
+  execute "normal Inew text \<Esc>"
+  " This invocation sets . on next line(line_no+1).
+  " Must set another line of ^ for deletion test.
+  put =['']
+
+  return {'^': line_no, '.': (line_no + 1)}
+endfunction
+
+
+" Use for a-Z marks. (See README about the mark detail)
+function! s:set_generic_mark(...)
+  let marks = type(a:1) == v:t_list ? a:1 : split(a:1, '\zs')
+  let on_same_line = a:0 == 2 ? a:2 : 0
+  let specs = {}
+  let line_no = 1
+
+  for name in marks
+    put =['']               " Create empty line under the current one.
+    call cursor(line_no, 1) " Bring the cursor back to the current line.
     execute 'normal m'.name
-    let current_spec[name] = line_no
-    if !fix_lno
+    let specs[name] = line_no
+    if !on_same_line
       let line_no += 1
     endif
   endfor
 
-  let merged = deepcopy(current_spec, 1)
-  call extend(merged, deepcopy(other_spec, 1))
+  return specs
+endfunction
 
-  let globals = {}
-  for [name, line_no] in items(current_spec)
-    if name =~ '\v^\u|\d$'
-      let globals[name] = line_no
+
+" Use for <,> marks. (See README about the mark detail)
+function! s:set_angle_brackets_mark(right)
+  let marks = a:right ? ['<', '>'] : ['<']
+  let specs = {}
+  let line_no = 1
+
+  for name in marks
+    put =['']
+    call cursor(line_no, 1)
+    execute 'normal m'.name
+    let specs[name] = line_no
+    let line_no += 1
+  endfor
+
+  return specs
+endfunction
+
+
+" Use for quote,[,] marks. (See README about the mark detail)
+function! s:set_one_mark(mark)
+  let line_no = 1
+  call cursor(line_no, 1)
+  execute 'normal m'.a:mark
+
+  return line_no
+endfunction
+
+
+" Use for invisible (,),{,} marks.
+function! s:set_invisible_mark()
+  " Move new buffer because a paragraph range(for {,} marks) cannot be assumed by other tests.
+  call s:activate_win(s:add_buffer())
+  call cursor(1, 1) " Move to line 1.
+  put =['']         " Add line, the cursor is on line 2 but sentence-rage is line 1-2.
+
+  return {'(': 1, ')': 2, '{': 1, '}': 2} " Thus, spec becomes as here.
+endfunction
+
+
+function! Expect_Remove(current_win_id, current_buffer_marks, other_win_id, other_buffer_marks)
+  call s:activate_win(a:current_win_id)
+  call hlmarks#mark#remove(a:current_buffer_marks)
+
+  call Expect_Mark(a:current_buffer_marks, 0)
+
+  call s:activate_win(a:other_win_id)
+
+  call Expect_Mark(a:other_buffer_marks, 1)
+endfunction
+
+
+function! Expect_Remove_All(current_win_id, current_buffer_marks, other_win_id, other_buffer_marks)
+  call s:activate_win(a:current_win_id)
+  call hlmarks#mark#remove_all()
+
+  call Expect_Mark(a:current_buffer_marks, 0)
+
+  call s:activate_win(a:other_win_id)
+
+  call Expect_Mark(a:other_buffer_marks, 1)
+endfunction
+
+
+function! Expect_Remove_On_Line(current_win_id, current_mark_spec, other_win_id, other_buffer_marks)
+  let mark_spec = type(a:current_mark_spec) == v:t_dict ? items(a:current_mark_spec) : a:current_mark_spec
+
+  call s:activate_win(a:current_win_id)
+
+  for [name, line_no] in mark_spec
+    let result = hlmarks#mark#remove_on_line(line_no)
+
+    if result == []
+      call vspec#debug(name.'='.line_no.':'.(string(getpos("'".name))))
+    endif
+
+    Expect result != []
+
+    " There's possibility that result has two or more marks (e.g. automated-updating marks)
+    " even if set each marks at different line, thus can't compare == operator.
+    Expect index(result, name) >= 0
+    call Expect_Mark(name, 0)
+  endfor
+
+  call s:activate_win(a:other_win_id)
+
+  call Expect_Mark(a:other_buffer_marks, 1)
+endfunction
+
+
+function! Expect_Bundle(mark_spec)
+  let bundle = Call(s:Reg('func'), join(keys(a:mark_spec), ''))
+
+  Expect bundle !~? 'error'
+
+  for [name, line_no] in items(a:mark_spec)
+    let escaped = escape(name, '^.<>[]{}()')
+
+    if index(['(', ')', '{', '}'], name) == -1
+      Expect bundle =~# '\v'.escaped.'\s+'.line_no.'\D+'
+    else
+      Expect bundle =~# '\v'.escaped.'\s+'.line_no.'.{-1,}\(invisible\)'
     endif
   endfor
-  for [name, line_no] in items(other_spec)
-    if name =~ '\v^\u|\d$'
-      let globals[name] = line_no
-    endif
-  endfor
+endfunction
 
-  return {
-    \ 'c': current_spec,
-    \ 'o': other_spec,
-    \ 'a': merged,
-    \ 'g': globals,
-    \ 'w': {'c': current_wno, 'o': other_wno},
-    \ 'b': {'c': current_bno, 'o': other_bno},
-    \ }
+
+function! Expect_Bundle_Extract(mark_spec)
+  let bundle = Call(s:Reg('bundle_func'), join(keys(a:mark_spec), ''))
+  let result = Call(s:Reg('func'), bundle, 1)
+
+  Expect len(result) == len(a:mark_spec)
+
+  for [name, line_no] in items(result)
+    Expect line_no == a:mark_spec[name]
+  endfor
 endfunction
 
 
 
 describe 'specs_for_sign()'
 
-  it 'should return local/global mark specs only in current buffer'
-    let signable_marks = split(g:hlmarks_displaying_marks, '\zs')
-    let mark_data = s:prepare_mark({'c': signable_marks, 'o': []})
-    let mark_spec = mark_data.c
+  before
+    call s:StashGlobal(1)
+  end
 
+  after
+    call s:StashGlobal(0)
+    call s:purge_mark()
+  end
+
+  it 'should return local/global mark specs defined in global option only in current buffer'
+    let g:hlmarks_displaying_marks = 'aA'
+    let defined_marks = split(g:hlmarks_displaying_marks, '\zs')
+    let mark_spec = s:set_generic_mark(defined_marks)
     let result = hlmarks#mark#specs_for_sign()
 
-    Expect len(mark_spec) == len(signable_marks)
+    Expect len(mark_spec) == len(defined_marks)
     Expect len(result) == len(mark_spec)
 
     for [name, line_no] in items(result)
-      Expect index(signable_marks, name) >= 0
+      Expect index(defined_marks, name) >= 0
       Expect has_key(mark_spec, name) to_be_true
       Expect line_no == mark_spec[name]
     endfor
-
-    call s:prepare_mark(0)
-
   end
 
   it 'should return empty dict if no mark is placed'
@@ -131,33 +243,27 @@ describe 'generate_name()'
 
   after
     call s:Local(0)
-    call s:prepare_mark(0)
+    call s:purge_mark()
   end
 
   context '(1st arg = 1 = name for local marks)'
 
     it 'should return next character that is not used yet in a-z'
-      let marks = {'c': ['a'], 'o': []}
-      call s:prepare_mark(marks)
-
+      call s:set_generic_mark('a')
       call s:Local({'automarkables': 'abAB'})
 
       Expect hlmarks#mark#generate_name(1) == 'b'
     end
 
     it 'should not return global marks(A-Z)'
-      let marks = {'c': ['b'], 'o': []}
-      call s:prepare_mark(marks)
-
+      call s:set_generic_mark('b')
       call s:Local({'automarkables': 'abAB'})
 
       Expect hlmarks#mark#generate_name(1) == 'a'
     end
 
     it 'should return empty string if all marks are used'
-      let marks = {'c': ['a', 'b'], 'o': []}
-      call s:prepare_mark(marks)
-
+      call s:set_generic_mark('ab')
       call s:Local({'automarkables': 'abAB'})
 
       Expect hlmarks#mark#generate_name(1) == ''
@@ -168,27 +274,21 @@ describe 'generate_name()'
   context '(1st arg = 0 = name for global marks, only current buffer)'
 
     it 'should return next character that is not used yet in A-Z'
-      let marks = {'c': ['A'], 'o': []}
-      call s:prepare_mark(marks)
-
+      call s:set_generic_mark('A')
       call s:Local({'automarkables': 'abAB'})
 
       Expect hlmarks#mark#generate_name(0) == 'B'
     end
 
     it 'should not return local marks(a-z)'
-      let marks = {'c': ['B'], 'o': []}
-      call s:prepare_mark(marks)
-
+      call s:set_generic_mark('B')
       call s:Local({'automarkables': 'abAB'})
 
       Expect hlmarks#mark#generate_name(0) == 'A'
     end
 
     it 'should return empty string if all marks are used'
-      let marks = {'c': ['A', 'B'], 'o': []}
-      call s:prepare_mark(marks)
-
+      call s:set_generic_mark('AB')
       call s:Local({'automarkables': 'abAB'})
 
       Expect hlmarks#mark#generate_name(0) == ''
@@ -199,27 +299,27 @@ describe 'generate_name()'
   context '(1st arg = 0 = name for global marks, both current/other buffer)'
 
     it 'should return next character that is not used yet in A-Z'
-      let marks = {'c': ['A'], 'o': ['B']}
-      call s:prepare_mark(marks)
-
+      call s:set_generic_mark('A')
+      call s:activate_win(s:add_buffer())
+      call s:set_generic_mark('B')
       call s:Local({'automarkables': 'abABC'})
 
       Expect hlmarks#mark#generate_name(0) == 'C'
     end
 
     it 'should not return local marks(a-z)'
-      let marks = {'c': ['B'], 'o': ['C']}
-      call s:prepare_mark(marks)
-
+      call s:set_generic_mark('B')
+      call s:activate_win(s:add_buffer())
+      call s:set_generic_mark('C')
       call s:Local({'automarkables': 'abABC'})
 
       Expect hlmarks#mark#generate_name(0) == 'A'
     end
 
     it 'should return empty string if all marks are used'
-      let marks = {'c': ['A', 'B'], 'o': ['C']}
-      call s:prepare_mark(marks)
-
+      call s:set_generic_mark('AB')
+      call s:activate_win(s:add_buffer())
+      call s:set_generic_mark('C')
       call s:Local({'automarkables': 'abABC'})
 
       Expect hlmarks#mark#generate_name(0) == ''
@@ -232,10 +332,12 @@ end
 
 describe 'generate_state()'
 
-  it 'should generate current mark state'
-    let mark_data = s:prepare_mark()
-    let mark_spec = mark_data.c
+  after
+    call s:purge_mark()
+  end
 
+  it 'should generate current mark state'
+    let mark_spec = s:set_generic_mark('ab')
     let state = hlmarks#mark#generate_state()
 
     Expect len(state) == len(mark_spec)
@@ -244,14 +346,16 @@ describe 'generate_state()'
       Expect has_key(mark_spec, name) to_be_true
       Expect mark_spec[name] == line_no
     endfor
-
-    call s:prepare_mark(0)
   end
 
 end
 
 
 describe 'get_cache()'
+
+  after
+    call s:purge_mark()
+  end
 
   it 'should return empty hash if cache is empty'
     let cache = hlmarks#mark#get_cache()
@@ -260,11 +364,8 @@ describe 'get_cache()'
   end
 
   it 'should return cache that is set by set_cache()'
-    let mark_data = s:prepare_mark()
-    let mark_spec = mark_data.c
-
+    let mark_spec = s:set_generic_mark('ab')
     call hlmarks#mark#set_cache()
-
     let cache = hlmarks#mark#get_cache()
 
     Expect len(cache) == len(mark_spec)
@@ -273,8 +374,6 @@ describe 'get_cache()'
       Expect has_key(mark_spec, name) to_be_true
       Expect mark_spec[name] == line_no
     endfor
-
-    call s:prepare_mark(0)
   end
 
 end
@@ -305,57 +404,69 @@ end
 
 describe 'pos()'
 
-  it 'should return line/buffer number for normally marks'
-    let marks = split('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ<>', '\zs')
-    let mark_data = s:prepare_mark({'c': marks, 'o': []})
+  after
+    call s:purge_mark()
+  end
+
+  it 'should return line/buffer number for a-Z marks'
+    let mark_spec = s:set_generic_mark('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ')
     let buffer_no = bufnr('%')
 
-    for [name, line_no] in items(mark_data.c)
+    for [name, line_no] in items(mark_spec)
       Expect hlmarks#mark#pos(name) == [buffer_no, line_no]
     endfor
-
-    call s:prepare_mark(0)
   end
 
-  it 'should return line/buffer number for auto-generating marks'
-    " Create mark .^ (As below expresion, double quote is required for backslash and output escape.
-    execute "normal Inew text \<Esc>"
-
+  it 'should return line/buffer number for <,> marks'
+    let mark_spec = s:set_angle_brackets_mark(1)
     let buffer_no = bufnr('%')
-    for name in ['.', '^']
-      let pos = hlmarks#mark#pos(name)
-      Expect pos[0] == buffer_no
-      Expect string(pos[1]) =~ '\v^\d+$'
+
+    for [name, line_no] in items(mark_spec)
+      Expect hlmarks#mark#pos(name) == [buffer_no, line_no]
     endfor
   end
 
-  it 'should return line/buffer number for dynamic marks'
-    let dynamics = ["'", '`', '[', ']', '"']
+  it 'should return line/buffer number for ^,. marks'
+    let mark_spec = s:generate_automated_mark()
+    let buffer_no = bufnr('%')
 
-    for name in dynamics
-      let mark_data = s:prepare_mark({'c': [name], 'o': []})
-      let buffer_no = bufnr('%')
-
-      Expect hlmarks#mark#pos(name) == [buffer_no, mark_data.c[name]]
-
-      call s:prepare_mark(0)
+    for [name, line_no] in items(mark_spec)
+      Expect hlmarks#mark#pos(name) == [buffer_no, line_no]
     endfor
   end
 
-  it 'should return line/buffer number for invisible marks'
-    let invisibles = ['(', ')', '{', '}']
-
-    " Set some dummy marks.
-    let mark_data = s:prepare_mark({'c': ['a', 'b', 'c'], 'o': []})
-    " Single/back/double-quote is set in this point.
-    " Create mark .^ (As below expresion, double quote is required for backslash and output escape.
-    execute "normal Inew text \<Esc>"
-
+  it 'should return line/buffer number for single-quote mark'
+    let line_no = s:set_one_mark("'")
     let buffer_no = bufnr('%')
-    for name in invisibles
-      let pos = hlmarks#mark#pos(name)
-      Expect pos[0] == buffer_no
-      Expect string(pos[1]) =~ '\v^\d+$'
+
+    Expect hlmarks#mark#pos("'") == [buffer_no, line_no]
+  end
+
+  it 'should return line/buffer number for " mark'
+    let line_no = s:set_one_mark('"')
+    let buffer_no = bufnr('%')
+
+    Expect hlmarks#mark#pos('"') == [buffer_no, line_no]
+  end
+
+  it 'should return line/buffer number for [,] marks'
+    " Must set separately because it will change the other's line number.
+    let marks = ['[', ']']
+    let buffer_no = bufnr('%')
+
+    for name in marks
+      let line_no = s:set_one_mark(name)
+
+      Expect hlmarks#mark#pos(name) == [buffer_no, line_no]
+    endfor
+  end
+
+  it 'should return line/buffer number for invisible (,),{,} marks'
+    let mark_spec = s:set_invisible_mark()
+    let buffer_no = bufnr('%')
+
+    for [name, line_no] in items(mark_spec)
+      Expect hlmarks#mark#pos(name) == [buffer_no, line_no]
     endfor
   end
 
@@ -364,23 +475,90 @@ end
 
 describe 'remove()'
 
-  it 'should try to remove passed any mark with suppressing errors'
-    " Marks - can be set manually, deletable/undeletable, static/dynamic position.
-    let enable_set_manually = split('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ`''<>[]', '\zs')
-    let enable_remove = split('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.^<>[]"', '\zs')
-    let unable_remove = '`''(){}' " '`' is appears as `'` in marks command result.
+  after
+    call s:purge_mark()
+  end
 
-    let mark_data = s:prepare_mark({'c': enable_set_manually, 'o': []})
-    " Single/back/double-quote is set in this point.
-    " Create mark .^ (As below expresion, double quote is required for backslash and output escape.
-    execute "normal Inew text \<Esc>"
+  it 'should remove a-Z marks'
+    let current_buffer_marks = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLM'
+    let other_buffer_marks = 'abcdefghijklmnopqrstuvwxyzNOPQRSTUVWXYZ'
 
-    call hlmarks#mark#remove(join(enable_remove, ''))
-    call hlmarks#mark#remove(unable_remove)
+    let current_win_id = s:win_id()
+    call s:set_generic_mark(current_buffer_marks)
 
-    call Expect_Mark(enable_remove, 0)
+    let other_win_id = s:add_buffer()
+    call s:activate_win(other_win_id)
+    call s:set_generic_mark(other_buffer_marks)
 
-    call s:prepare_mark(0)
+    call Expect_Remove(current_win_id, current_buffer_marks, other_win_id, other_buffer_marks)
+  end
+
+  it 'should remove <,> marks'
+    let marks = '<>'
+
+    let current_win_id = s:win_id()
+    call s:set_angle_brackets_mark(1)
+
+    let other_win_id = s:add_buffer()
+    call s:activate_win(other_win_id)
+    call s:set_angle_brackets_mark(1)
+
+    call Expect_Remove(current_win_id, marks, other_win_id, marks)
+  end
+
+  it 'should remove ^,. marks'
+    let marks = '^.'
+
+    let current_win_id = s:win_id()
+    call s:generate_automated_mark()
+
+    let other_win_id = s:add_buffer()
+    call s:activate_win(other_win_id)
+    call s:generate_automated_mark()
+
+    call Expect_Remove(current_win_id, marks, other_win_id, marks)
+  end
+
+  it 'should try to remove single-quote mark that is unable to remove without error'
+    let mark = "'"
+    call s:set_one_mark(mark)
+
+    call hlmarks#mark#remove(mark)
+  end
+
+  it 'should remove " mark'
+    let mark = '"'
+
+    let current_win_id = s:win_id()
+    call s:set_one_mark(mark)
+
+    let other_win_id = s:add_buffer()
+    call s:activate_win(other_win_id)
+    call s:set_one_mark(mark)
+
+    call Expect_Remove(current_win_id, mark, other_win_id, mark)
+  end
+
+  it 'should remove [,] marks'
+    " No need to set separately in this case because line number is not used for test,
+    " so can use set_generic_mark().
+    let marks = '[]'
+
+    let current_win_id = s:win_id()
+    call s:set_generic_mark(marks)
+
+    let other_win_id = s:add_buffer()
+    call s:activate_win(other_win_id)
+    call s:set_generic_mark(marks)
+
+    call Expect_Remove(current_win_id, marks, other_win_id, marks)
+  end
+
+  it 'should try to remove invisible (,),{,} marks that are unable to remove without error'
+    let marks = '(){}'
+    call s:set_invisible_mark()
+
+    call hlmarks#mark#remove(marks)
   end
 
 end
@@ -388,29 +566,89 @@ end
 
 describe 'remove_all()'
 
-  it 'should remove all marks in current buffer'
-    " Marks - can be set manually, deletable, static/dynamic position.
-    let marks_current = split('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN<>[]', '\zs')
-    " Marks - can be set manually, deletable/undeletable, static/dynamic position.(except '`')
-    let marks_other = split('abcdefghijklmnopqrstuvwxyzOPQRSTUVWXYZ''<>[]', '\zs')
-    " Marks - deletable, except some globals that are placed in other buffer.
-    let should_be_removed = split('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN0123456789.^<>[]"', '\zs')
+  after
+    call s:purge_mark()
+  end
 
-    " Set marks that can be set manually.
-    let mark_data = s:prepare_mark({'c': marks_current, 'o': marks_other})
-    " Single/back/double-quote is set in this point.
-    " Create mark .^ (As below expresion, double quote is required for backslash and output escape.
-    execute "normal Inew text \<Esc>"
+  it 'should remove a-Z marks in current buffer only'
+    let current_buffer_marks = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLM'
+    let other_buffer_marks = 'abcdefghijklmnopqrstuvwxyzNOPQRSTUVWXYZ'
+
+    let current_win_id = s:win_id()
+    call s:set_generic_mark(current_buffer_marks)
+
+    let other_win_id = s:add_buffer()
+    call s:activate_win(other_win_id)
+    call s:set_generic_mark(other_buffer_marks)
+
+    call Expect_Remove_All(current_win_id, current_buffer_marks, other_win_id, other_buffer_marks)
+  end
+
+  it 'should remove <,> marks in current buffer only'
+    let marks = '<>'
+
+    let current_win_id = s:win_id()
+    call s:set_angle_brackets_mark(1)
+
+    let other_win_id = s:add_buffer()
+    call s:activate_win(other_win_id)
+    call s:set_angle_brackets_mark(1)
+
+    call Expect_Remove_All(current_win_id, marks, other_win_id, marks)
+  end
+
+  it 'should remove ^,. marks in current buffer only'
+    let marks = '^.'
+
+    let current_win_id = s:win_id()
+    call s:generate_automated_mark()
+
+    let other_win_id = s:add_buffer()
+    call s:activate_win(other_win_id)
+    call s:generate_automated_mark()
+
+    call Expect_Remove_All(current_win_id, marks, other_win_id, marks)
+  end
+
+  it 'should try to remove single-quote mark that is unable to remove without error'
+    let mark = "'"
+    call s:set_one_mark(mark)
 
     call hlmarks#mark#remove_all()
+  end
 
-    call Expect_Mark(should_be_removed, 0)
+  it 'should remove " mark in current buffer only'
+    let mark = '"'
 
-    execute mark_data.w.o . 'wincmd w'
-    call Expect_Mark(marks_other, 1)
-    execute mark_data.w.c . 'wincmd w'
+    let current_win_id = s:win_id()
+    call s:set_one_mark(mark)
 
-    call s:prepare_mark(0)
+    let other_win_id = s:add_buffer()
+    call s:activate_win(other_win_id)
+    call s:set_one_mark(mark)
+
+    call Expect_Remove_All(current_win_id, mark, other_win_id, mark)
+  end
+
+  it 'should remove [,] marks in current buffer only'
+    " No need to set separately in this case because line number is not used for test,
+    " so can use set_generic_mark().
+    let marks = '[]'
+
+    let current_win_id = s:win_id()
+    call s:set_generic_mark(marks)
+
+    let other_win_id = s:add_buffer()
+    call s:activate_win(other_win_id)
+    call s:set_generic_mark(marks)
+
+    call Expect_Remove_All(current_win_id, marks, other_win_id, marks)
+  end
+
+  it 'should try to remove invisible (,),{,} marks that are unable to remove without error'
+    call s:set_invisible_mark()
+
+    call hlmarks#mark#remove_all()
   end
 
 end
@@ -418,66 +656,108 @@ end
 
 describe 'remove_on_line()'
 
-  it 'should remove mark that is placed on designated line only current buffer and return it as list'
-    " Marks - can be set manually, deletable, static position.
-    let marks_current_1 = split('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN<>', '\zs')
-    " Marks - can be set manually, deletable, dynamic position.
-    let marks_current_2 = split('[]', '\zs')
-    " Marks - can be set manually, deletable/undeletable, static/dynamic position.(except '`')
-    let marks_other = split('abcdefghijklmnopqrstuvwxyzOPQRSTUVWXYZ''<>[]', '\zs')
+  after
+    call s:purge_mark()
+  end
 
-    " Set marks that can be set manually.
-    let mark_data = s:prepare_mark({'c': marks_current_1, 'o': marks_other})
-    " Single/back/double-quote is set in this point.
-    " Create mark .^ (As below expresion, double quote is required for backslash and output escape.
-    execute "normal Inew text \<Esc>"
+  it 'should remove a-Z marks in current buffer only'
+    let current_buffer_marks = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLM'
+    let other_buffer_marks = 'abcdefghijklmnopqrstuvwxyzNOPQRSTUVWXYZ'
 
-    let mark_spec = mark_data.c
+    let current_win_id = s:win_id()
+    let mark_spec = s:set_generic_mark(current_buffer_marks)
 
-    for [name, line_no] in items(mark_spec)
-      let result = hlmarks#mark#remove_on_line(line_no)
-      " Inspector
-      if result == []
-        Expect name.'='.line_no.':'.(string(getpos("'".name))) == '(debug)'
-      endif
-      " Dynamic marks are removed together some static marks, so check by existence.
-      Expect index(result, name) >= 0
-      call Expect_Mark([name], 0)
+    let other_win_id = s:add_buffer()
+    call s:activate_win(other_win_id)
+    call s:set_generic_mark(other_buffer_marks)
+
+    call Expect_Remove_On_Line(current_win_id, mark_spec, other_win_id, other_buffer_marks)
+  end
+
+  it 'should remove <,> marks in current buffer only'
+    let marks = '<>'
+
+    let current_win_id = s:win_id()
+    let mark_spec = s:set_angle_brackets_mark(1)
+
+    let other_win_id = s:add_buffer()
+    call s:activate_win(other_win_id)
+    call s:set_angle_brackets_mark(1)
+
+    " Must remove right angle-brackets at first because it will change to left one if remove left one at first. 
+    call Expect_Remove_On_Line(current_win_id, [['>', mark_spec['>']], ['<', mark_spec['<']]], other_win_id, marks)
+  end
+
+  it 'should remove ^,. marks in current buffer only'
+    let marks = '^.'
+
+    let current_win_id = s:win_id()
+    let mark_spec = s:generate_automated_mark()
+
+    let other_win_id = s:add_buffer()
+    call s:activate_win(other_win_id)
+    call s:generate_automated_mark()
+
+    call Expect_Remove_On_Line(current_win_id, mark_spec, other_win_id, marks)
+  end
+
+  it 'should try to remove single-quote mark that is unable to remove without error'
+    let mark = "'"
+    let line_no = s:set_one_mark(mark)
+
+    call hlmarks#mark#remove_on_line(line_no)
+  end
+
+  it 'should remove " mark in current buffer only'
+    let mark = '"'
+
+    let current_win_id = s:win_id()
+    let line_no = s:set_one_mark(mark)
+
+    let other_win_id = s:add_buffer()
+    call s:activate_win(other_win_id)
+    call s:set_one_mark(mark)
+
+    call Expect_Remove_On_Line(current_win_id, [[mark, line_no]], other_win_id, mark)
+  end
+
+  it 'should remove [,] marks in current buffer only'
+    " Must set separately because it will change the other's line number.
+    let marks = ['[', ']']
+    let current_win_id = s:win_id()
+    let other_win_id = s:add_buffer()
+
+    for name in marks
+      call s:activate_win(current_win_id)
+      let line_no = s:set_one_mark(name)
+
+      call s:activate_win(other_win_id)
+      call s:set_one_mark(name)
+
+      call Expect_Remove_On_Line(current_win_id, [[name, line_no]], other_win_id, name)
     endfor
+  end
 
-    " Remove marks that can not be set but deletable(but perhaps, .^ are removed in this point).
-    for line_no in range(1, line('$'))
+  it 'should try to remove invisible (,),{,} marks that are unable to remove without error'
+    let mark_spec = s:set_invisible_mark()
+
+    for line_no in values(mark_spec)
       call hlmarks#mark#remove_on_line(line_no)
-    endfor
-
-    call Expect_Mark(['.', '^', '"'], 0)
-
-    execute mark_data.w.o . 'wincmd w'
-    call Expect_Mark(marks_other, 1)
-    execute mark_data.w.c . 'wincmd w'
-
-    call s:prepare_mark(0)
-
-    " Dynamic marks.
-    for name in marks_current_2
-      let mark_data = s:prepare_mark({'c': [name], 'o': []})
-      Expect index(hlmarks#mark#remove_on_line(mark_data.c[name]), name) >= 0
-      call s:prepare_mark(0)
     endfor
   end
 
   it 'should remove all marks on same line'
-    let marks = ['a', 'b']
-    let mark_data = s:prepare_mark({'c': marks, 'o': []}, 1)
-    let line_no = mark_data.c[marks[0]]
+    let marks = 'ab'
+    let mark_spec = s:set_generic_mark(marks, 1)
+    let line_no = values(mark_spec)[0]
 
     let result = hlmarks#mark#remove_on_line(line_no)
 
-    for name in marks
+    for name in split(marks, '\zs')
       Expect index(result, name) >= 0
     endfor
 
-    call s:prepare_mark(0)
+    call Expect_Mark(marks, 0)
   end
 
 end
@@ -485,20 +765,23 @@ end
 
 describe 'set()'
 
-  it 'should set mark that can be placed manually'
-    " Marks - can be set manually, deletable/undeletable, static/dynamic position.(except '`')
-    let enable_set_manually = split('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ''<>[]', '\zs')
+  after
+    call s:purge_mark()
+  end
 
-    " Must be manually in test.
+  it 'should set mark that can be placed manually'
+    let marks = split('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ''"<>[]', '\zs')
+
+    " Must only use native function in here so drop hook.
     silent! execute printf('noremap <script><unique> %s m', g:hlmarks_alias_native_mark_cmd)
 
-    for name in enable_set_manually
+    for name in marks
       call hlmarks#mark#set(name)
     endfor
 
-    call Expect_Mark(enable_set_manually, 1)
+    call Expect_Mark(marks, 1)
 
-    " Revert map.
+    " Revert hook.
     silent! execute printf('unmap %s', g:hlmarks_alias_native_mark_cmd)
   end
 
@@ -515,81 +798,75 @@ describe 's:bundle()'
 
   after
     call s:Reg(0)
+    call s:purge_mark()
   end
 
-  it 'should return info for designated mark in current buffer(but globals in others) as single strings crumb'
-    " c(a A), o(b B) =(all)=> a, A, B
-    let mark_data = s:prepare_mark()
+  it 'should return single chunk contains designated a-Z marks information'
+    let current_buffer_marks = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLM'
+    let other_buffer_marks = 'NOPQRSTUVWXYZ'
 
-    let bundle = Call(s:Reg('func'), join(keys(mark_data.a), ''))
+    let current_win_id = s:win_id()
+    let mark_spec = s:set_generic_mark(current_buffer_marks)
 
-    for [name, line_no] in items(mark_data.c)
-      Expect bundle =~# '\v'.name.'\s+'.line_no.'\D+'
-    endfor
+    call s:activate_win(s:add_buffer())
+    call extend(mark_spec, s:set_generic_mark(other_buffer_marks))
+    call s:activate_win(current_win_id)
 
-    for [name, line_no] in items(mark_data.g)
-      Expect bundle =~# '\v'.name.'\s+'.line_no.'\D+'
-    endfor
-
-    call s:prepare_mark(0)
+    call Expect_Bundle(mark_spec)
   end
 
-  it 'should return info for invisible marks that normally can not get by command'
-    let mark_data = s:prepare_mark()
-    let invisibles = ['(', ')', '{', '}']
+  it 'should return single chunk contains <,> marks information'
+    let mark_spec = s:set_angle_brackets_mark(1)
 
-    let bundle = Call(s:Reg('func'), join(invisibles, ''))
-
-    Expect bundle !~? 'error'
-
-    for name in keys(mark_data.a)
-      Expect bundle !~# '\v'.name.'\s+'
-    endfor
-
-    for name in invisibles
-      Expect bundle =~# '\v'.escape(name, join(invisibles, '')).'\s+\d{1,}.{-1,}\(invisible\)'
-    endfor
-
-    call s:prepare_mark(0)
+    call Expect_Bundle(mark_spec)
   end
 
-  it 'should return correct info if mixed(normal and invisible) marks are designated'
-    let mark_data = s:prepare_mark()
-    let invisibles = ['(', ')', '{', '}']
+  it 'should return single chunk contains ^,. marks information'
+    let mark_spec = s:generate_automated_mark()
 
-    let bundle = Call(s:Reg('func'), join((keys(mark_data.c) + invisibles), ''))
-
-    Expect bundle !~? 'error'
-
-    for [name, line_no] in items(mark_data.c)
-      Expect bundle =~# '\v'.name.'\s+'.line_no.'\D+'
-    endfor
-
-    for name in invisibles
-      Expect bundle =~# '\v'.escape(name, join(invisibles, '')).'\s+\d{1,}.{-1,}\(invisible\)'
-    endfor
-
-    call s:prepare_mark(0)
+    call Expect_Bundle(mark_spec)
   end
 
-  it 'should return info for all available marks'
-    " All marks except below marks.
-    "   - Global 0-9 because there marks can not be set here.
-    "   - Back-quote(`) is apprears in list as single(').
-    let all_marks = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.''^<>[]{}()"'
-    let enable_set_manually = split('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ''`<>[]', '\zs')
+  it 'should return single chunk contains single-quote mark information'
+    let mark_spec = {"'": s:set_one_mark("'")}
 
-    " Set marks that can be set manually.
-    let mark_data = s:prepare_mark({'c': enable_set_manually, 'o': []})
-    " Single/back/double-quote is set in this point.
-    " Create mark .^ (As below expresion, double quote is required for backslash and output escape.
-    execute "normal Inew text \<Esc>"
+    call Expect_Bundle(mark_spec)
+  end
 
-    let bundle = Call(s:Reg('func'), all_marks)
+  it 'should return single chunk contains " mark information'
+    let mark_spec = {'"': s:set_one_mark('"')}
 
-    for name in split(all_marks, '\zs')
-      Expect bundle =~# '\v\s+'.escape(name, '.^[]<>{}()').'\s+\d'
+    call Expect_Bundle(mark_spec)
+  end
+
+  it 'should return single bundle contains [,] marks information'
+    " Must set separately because it will change the other's line number.
+    let marks = ['[', ']']
+
+    for name in marks
+      let mark_spec = {}
+      let mark_spec[name] = s:set_one_mark(name)
+
+      call Expect_Bundle(mark_spec)
     endfor
+  end
+
+  it 'should return single chunk contains invisible marks information that normally cannot get by command'
+    let mark_spec = s:set_invisible_mark()
+
+    call Expect_Bundle(mark_spec)
+  end
+
+  it 'should return single bundle only contains marks in current buffer'
+    let current_win_id = s:win_id()
+
+    call s:activate_win(s:add_buffer())
+    let mark_spec = s:set_generic_mark('a')
+    call s:activate_win(current_win_id)
+
+    let bundle = Call(s:Reg('func'), 'a')
+
+    Expect bundle !~# '\va\s+'.mark_spec['a'].'\D+'
   end
 
 end
@@ -606,74 +883,72 @@ describe 's:extract()'
 
   after
     call s:Reg(0)
+    call s:purge_mark()
   end
 
-  it 'should extract all marks info from single strings crumb'
-    " All marks except below marks.
-    "   - Global 0-9 because there marks can not be set here.
-    "   - Back-quote(`) is apprears in list as single(').
-    let all_marks = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.''^<>[]{}()"'
-    " Marks - can be set manually, deletable/undeletable, static/dynamic position.(except '`')
-    let marks_current = split('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN''<>[]', '\zs')
-    let marks_other = split('abcdefghijklmnopqrstuvwxyzOPQRSTUVWXYZ''<>[]', '\zs')
+  it 'should extract a-Z marks information from bundle'
+    let mark_spec = s:set_generic_mark('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ')
 
-    let mark_data = s:prepare_mark({'c': marks_current, 'o': marks_other})
-    " Single/back/double-quote is set in this point.
-    " Create mark .^ (As below expresion, double quote is required for backslash and output escape.
-    execute "normal Inew text \<Esc>"
+    call Expect_Bundle_Extract(mark_spec)
+  end
 
-    let mark_spec = mark_data.c
-    let bundle = Call(s:Reg('bundle_func'), all_marks)
+  it 'should extract <,> marks information from bundle'
+    let mark_spec = s:set_angle_brackets_mark(1)
 
-    let result = Call(s:Reg('func'), bundle, 1)
+    call Expect_Bundle_Extract(mark_spec)
+  end
 
-    Expect len(result) == len(split(all_marks, '\zs'))
+  it 'should extract ^,. marks information from bundle'
+    let mark_spec = s:generate_automated_mark()
 
-    for [name, line_no] in items(result)
-      " Except dynamics.
-      if has_key(mark_spec, name) && index(['[', ']'], name) < 0
-        Expect line_no == mark_spec[name]
-      endif
+    call Expect_Bundle_Extract(mark_spec)
+  end
+
+  it 'should extract sigle-quote mark information from bundle'
+    let mark_spec = {"'": s:set_one_mark("'")}
+
+    call Expect_Bundle_Extract(mark_spec)
+  end
+
+  it 'should extract " mark information from bundle'
+    let mark_spec = {'"': s:set_one_mark('"')}
+
+    call Expect_Bundle_Extract(mark_spec)
+  end
+
+  it 'should extract [,] marks information from bundle'
+    " Must set separately because it will change the other's line number.
+    let marks = ['[', ']']
+
+    for name in marks
+      let mark_spec = {}
+      let mark_spec[name] = s:set_one_mark(name)
+
+      call Expect_Bundle_Extract(mark_spec)
     endfor
-
-    call s:prepare_mark(0)
   end
 
-  it 'should extract all marks info except global in other buffer'
-    " All marks except below marks.
-    "   - Global 0-9 because there marks can not be set here.
-    "   - Back-quote(`) is apprears in list as single(').
-    let all_marks = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.''^<>[]{}()"'
-    let all_marks_current = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN.''^<>[]{}()"'
-    " Marks - can be set manually, deletable/undeletable, static/dynamic position.(except '`')
-    let marks_current = split('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN''<>[]', '\zs')
-    let marks_other = split('abcdefghijklmnopqrstuvwxyzOPQRSTUVWXYZ''<>[]', '\zs')
+  it 'should extract invisible marks information from bundle'
+    let mark_spec = s:set_invisible_mark()
 
-    let mark_data = s:prepare_mark({'c': marks_current, 'o': marks_other})
-    " Single/back/double-quote is set in this point.
-    " Create mark .^ (As below expresion, double quote is required for backslash and output escape.
-    execute "normal Inew text \<Esc>"
+    call Expect_Bundle_Extract(mark_spec)
+  end
 
-    let mark_spec = mark_data.c
-    let bundle = Call(s:Reg('bundle_func'), all_marks)
+  it 'should extract except global mark in other buffer'
+    let current_win_id = s:win_id()
 
+    call s:activate_win(s:add_buffer())
+    let mark_spec = s:set_generic_mark('A')
+    call s:activate_win(current_win_id)
+
+    let bundle = Call(s:Reg('bundle_func'), 'A')
     let result = Call(s:Reg('func'), bundle, 0)
 
-    Expect len(result) == len(split(all_marks_current, '\zs'))
-
-    for [name, line_no] in items(result)
-      " Except dynamics.
-      if has_key(mark_spec, name) && index(['[', ']'], name) < 0
-        Expect line_no == mark_spec[name]
-      endif
-    endfor
-
-    call s:prepare_mark(0)
+    Expect result == {}
   end
 
   it 'should return empty dict if has no mark'
-    let bundle = Call(s:Reg('bundle_func'), 'abcABC')
-
+    let bundle = Call(s:Reg('bundle_func'), 'aA')
     let result = Call(s:Reg('func'), bundle, 1)
 
     Expect result == {}
