@@ -538,7 +538,7 @@ describe 's:definition_bundle()'
     let signs = s:define_sign(1)
     let bundle = Call('s:definition_bundle')
 
-    Expect bundle != '' 
+    Expect bundle != ''
 
     for name in signs
       Expect bundle =~# name

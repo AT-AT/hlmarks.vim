@@ -35,8 +35,8 @@ Icon
 .Spotlight-V100
 .Trashes
 
-# Installed Gems
-vendor/bundle/*
+# Installed Testing Library
+vendor/
 
 # Auto Generated Tag file
 tags

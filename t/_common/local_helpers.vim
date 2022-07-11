@@ -2,8 +2,9 @@
 " Check mark existence.
 "
 function! Expect_Mark(marks, should_present)
+  let marks = type(a:marks) == v:t_list ? a:marks : split(a:marks, '\zs')
   let bundle = _Grab_('marks')
-  for name in a:marks
+  for name in marks
     if a:should_present
       let matched = []
       for crumb in bundle

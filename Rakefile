@@ -3,5 +3,5 @@ task :dump do
 end
 
 task :test do
-  sh 'bundle exec ./vendor/vim-vspec/bin/prove-vspec -d ./vendor/vim-vspec -d .'
+  sh './vendor/vim-vspec/bin/prove-vspec -d ./vendor/vim-vspec -d .'
 end
