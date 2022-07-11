@@ -332,17 +332,16 @@ hlmarks_sign_gutterhl_symbol                    *hlmarks_sign_gutterhl_symbol*
 ==============================================================================
 DEVELOPMENT                                              *hlmarks-development*
 
-For the testing and debugging, using the following plug-ins.
+The following installations are required for testing and debugging.
     - vim-vspec (https://github.com/kana/vim-vspec)
-    - vimconsole (https://github.com/rbtnn/vimconsole.vim)
+    - rake (ruby)
 
-vim-vspec has been included with this plug-in, in addition, you need to
-install other Gem files(Please refer to the Gemfile).
+For vim-vspec, create a directory named "vendor" and copy the repository of
+vim-vspec into it.
 
-For execution of test, run the following command in plugin directory. >
+To run the test, execute the following command in the directory where the
+Rakefile is located. >
 
-    bundle exec rake test  (if using Bundler)
-      or
     rake test
 <
 About writing test and others, please refer to the documentation and samples
@@ -355,6 +354,11 @@ For the format of the help file, referring to the following project.
 ==============================================================================
 CHANGELOG                                                  *hlmarks-changelog*
 
+2022/07/12  version 0.7.0~
+    + Update vim-vspec.
+    + Remove gem dependency for test.
+    + Update test.
+    + Update README and help.
 2021/10/25  version 0.6~
     + Fix gitignore to exclude tag file.
     + Fix pattern for matching data line in a bundle.
