@@ -323,9 +323,11 @@ hlmarks_sign_gutterhl_symbol                    *hlmarks_sign_gutterhl_symbol*
     - vim-vspec（https://github.com/kana/vim-vspec）
     - rake（ruby）
 
-vim-vspec は、vendor ディレクトリを作成してその中にリポジトリをコピーしてくだ
-さい。
+vim-vspec は、vendor/vim-vspec ディレクトリの中に展開してください。 >
 
+    mkdir -p vender/vim-vspec
+    git clone https://github.com/kana/vim-vspec.git vendor/vim-vspec
+<
 テストはRakefileがあるディレクトリで以下のコマンドを実行します。 >
 
     rake test
@@ -339,6 +341,9 @@ vim-vspec は、vendor ディレクトリを作成してその中にリポジト
 ==============================================================================
 更新履歴                                                   *hlmarks-changelog*
 
+2022/07/14  version 0.7.1~
+    + テストを修正
+    + ヘルプファイルを変更
 2022/07/12  version 0.7.0~
     + vim-vspec をアップデート
     + テスト用の Gem を廃止
