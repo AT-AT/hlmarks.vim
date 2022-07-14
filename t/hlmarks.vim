@@ -83,7 +83,6 @@ endfunction
 
 function! s:expect_autocmd(active, group)
   let bundle = _Grab_('autocmd '.a:group)
-  let bundle = _Grab_('autocmd '.a:group)
   let extracted = []
   for crumb in bundle
     if crumb =~# '\v^'.a:group.'\s+'
@@ -92,7 +91,7 @@ function! s:expect_autocmd(active, group)
   endfor
 
   if a:active
-    Expect len(extracted) == 4
+    Expect len(extracted) == 2
   else
     Expect empty(extracted) to_be_true
   endif

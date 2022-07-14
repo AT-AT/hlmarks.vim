@@ -70,22 +70,13 @@ on the operation of the |mark| function.
 LIMITATION                                                *hlmarks-limitation*
 
 - Poor and bad English. 8-(
-- Automatic update of highlight and mark name is done in the 4000ms interval,
-  only when there is no input from the user in the normal mode.
-  This is because the automatic execution of periodic processes is performed
-  in a pseudo approach, there is a possibility that unexpected behavior occurs
-  other than the normal mode.(I am praying sincerely that the official polling
-  functionality is implemented in Vim 8-))
-  Other than the normal mode, assuming that there is less likely to change the
-  mark or display in the gutter by others(plug-ins, etc), so I look at the 
-  situation in this specification at present.
 
 ==============================================================================
 INSTALLATION                                            *hlmarks-installation*
 
-This plug-in is developed against Vim 7.4.
+This plug-in is developed against Vim >= 8.0.
 Since this plug-in uses some of the features that have been introduced from
-7.4, it works only in 7.4 or later.
+8.0, it works only in 8.0 or later.
 
 This plug-in follows the standard runtime path structure, so you can install
 with a variety of plug-in managers such as Pathogen, Vundle, NeoBundle, or
@@ -278,6 +269,10 @@ hlmarks_autocmd_group                                  *hlmarks_autocmd_group*
         Specify prefix of |autocmd| group name.
         (Change only if a problem occurs with the default settings)
 
+hlmarks_update_sign_interval                    *hlmarks_update_sign_interval*
+        Default: 2000
+        Specify interval to update marks and signs with ms.
+
 hlmarks_stacked_signs_order                      *hlmarks_stacked_signs_order*
 
         Default: 0
@@ -356,6 +351,8 @@ For the format of the help file, referring to the following project.
 ==============================================================================
 CHANGELOG                                                  *hlmarks-changelog*
 
+2022/07/14  version 1.0.0~
+    + Use Timer function to update marks and signs.
 2022/07/14  version 0.7.1~
     + Update test.
     + Update help.

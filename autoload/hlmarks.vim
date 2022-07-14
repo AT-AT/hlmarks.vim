@@ -17,7 +17,8 @@ let s:plugin = {
   \   'hlmarks_alias_native_mark_cmd': '',
   \   'hlmarks_command_prefix': '',
   \   'hlmarks_autocmd_group': ''
-  \ }
+  \ },
+  \ 'timer': 0
   \ }
 
 function! s:_export_()
@@ -58,6 +59,7 @@ function! hlmarks#activate_plugin()
   call s:toggle_key_mappings(1)
   call s:toggle_usercmd(1)
   call s:toggle_autocmd(1)
+  call s:toggle_timer(1)
 
   call s:plugin.activate()
 endfunction
@@ -70,6 +72,7 @@ function! hlmarks#inactivate_plugin()
     return
   endif
 
+  call s:toggle_timer(0)
   call s:toggle_autocmd(0)
   call s:toggle_usercmd(0)
   call s:toggle_key_mappings(0)
@@ -247,11 +250,6 @@ function! s:toggle_autocmd(flag)
 
     if a:flag
       autocmd BufEnter,FileChangedShellPost * call hlmarks#refresh_signs()
-
-      " Update timer.
-      " Note: Interval is changed with 'set updatetime=N(ms,default=4000)'
-      autocmd CursorHold,CursorHoldI * call s:update_signs()
-      
     endif
   augroup END
 endfunction
@@ -294,6 +292,19 @@ function! s:toggle_key_mappings(flag)
 endfunction
 
 "
+" Toggle timer.
+"
+" Param:  [Any] flag: whether enable timer or not
+"
+function! s:toggle_timer(flag)
+  if a:flag
+    let s:timer = timer_start(g:hlmarks_update_sign_interval, function('s:update_signs'), {'repeat': -1})
+  else
+    call timer_stop(s:timer)
+  endif
+endfunction
+
+"
 " Toggle user-command.
 "
 " Param:  [Any] flag: whether enable user-cmd or not
@@ -328,12 +339,12 @@ endfunction
 "           Case1. Mark state is changed.
 "             This case is caused by changing state of un-settable marks, other plugin
 "             placed mark, user executes command directly, etc.
-"             Note that calculating difference of mark state is complecated, so refresh all.
+"             Note that calculating difference of mark state is complicated, so refresh all.
 "           Case2. Only sign state is changed.
 "             This case indicates that other plugin placed sign, user executes command, etc.
 "             Note that sign cache has info of line that only contains sign placed by others.
 "
-function! s:update_signs()
+function! s:update_signs(...)
   if !hlmarks#sign#should_place()
     return
   endif
@@ -356,30 +367,6 @@ function! s:update_signs()
   else
     " echo reltimestr(reltime()) . '(no changes)'
   endif
-
-  " Fix polling.
-  " Update should be invoked in normal-mode only. Because, key-output by
-  " feedkeys() in any mode other than normal-mode may raise problems.
-  " Also, mark and sign state is less likely to be changed in any mode other
-  " than mormal-mode.
-  " Notes.
-  "   - In insert-mode, should not use key 'ESC(e.g. \<C-g><ESC>)', because it
-  "     ring a bell. feedkeys() only stacks output to key buffer, so bell is 
-  "     not avoided with 'set vb=1 t_vb='.
-  "   - Hacks like 'K_IGNORE' or keys 'f\e' is not available.
-  "   - Refer and consult Unite.vim(autoload/unite/handlers.vim).
-  if mode() ==# 'n'
-    call feedkeys("g\<ESC>", 'n')
-  endif
-  " Remain past code for reference.
-  " if mode() ==# 'i'
-  "   if &modifiable == 1 && &readonly == 0 && &modified == 1
-  "     call feedkeys("a\<BS>", 'n')
-  "   end
-  " else
-  "   call feedkeys("g\<ESC>", 'n')
-  " endif
-
 endfunction
 
 

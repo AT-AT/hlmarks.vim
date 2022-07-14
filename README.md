@@ -1,6 +1,6 @@
 # Hlmarks.vim
 
-マークのハイライトと名前の表示して、少しだけ便利な機能を追加したVimプラグインです  
+マークのハイライトと名前の表示して、少しだけ便利な機能を追加したVimバージョン8以降向けのプラグインです  
 Hlmarks.vim is a Vim plug-in that highlight marks and display that name, and add a little only useful function.
 
 ## 特徴

@@ -8,7 +8,7 @@ if exists('g:loaded_hlmarks') && g:loaded_hlmarks
 endif
 
 " Check version.
-if v:version < 704
+if v:version < 800
   finish
 endif
 
@@ -61,6 +61,9 @@ let g:hlmarks_command_prefix        = get(g:, 'hlmarks_command_prefix', 'HlMarks
 
 " Group name for autocmd. (no need to change until you need)
 let g:hlmarks_autocmd_group         = get(g:, 'hlmarks_autocmd_group', 'HlMarks')
+
+" Timer interval for updating sign with ms.
+let g:hlmarks_update_sign_interval  = get(g:, 'hlmarks_update_sign_interval', 2000)
 
 " Stacking order type of signs for marks(by this plugin) and others.
 " Signs of marks are ..
