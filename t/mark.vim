@@ -5,22 +5,8 @@ runtime! plugin/hlmarks.vim
 
 call vspec#hint({'scope': 'hlmarks#mark#scope()', 'sid': 'hlmarks#mark#sid()'})
 
+let s:script_val = Create_Script_Val_Handler('s:mark')
 
-
-function! s:Reg(subject)
-  return _Reg_('__t__', a:subject)
-endfunction
-
-
-function! s:StashGlobal(subject)
-  let subject = a:subject != 0 ? 'hlmarks_' : 0
-  call _Stash_(subject)
-endfunction
-
-
-function! s:Local(subject)
-  return _HandleLocalDict_('s:mark', a:subject)
-endfunction
 
 
 function! s:purge_mark()
@@ -121,7 +107,7 @@ function! s:set_invisible_mark()
 endfunction
 
 
-function! Expect_Remove(current_win_id, current_buffer_marks, other_win_id, other_buffer_marks)
+function! s:expect_remove(current_win_id, current_buffer_marks, other_win_id, other_buffer_marks)
   call s:activate_win(a:current_win_id)
   call hlmarks#mark#remove(a:current_buffer_marks)
 
@@ -133,7 +119,7 @@ function! Expect_Remove(current_win_id, current_buffer_marks, other_win_id, othe
 endfunction
 
 
-function! Expect_Remove_All(current_win_id, current_buffer_marks, other_win_id, other_buffer_marks)
+function! s:expect_remove_All(current_win_id, current_buffer_marks, other_win_id, other_buffer_marks)
   call s:activate_win(a:current_win_id)
   call hlmarks#mark#remove_all()
 
@@ -145,7 +131,7 @@ function! Expect_Remove_All(current_win_id, current_buffer_marks, other_win_id, 
 endfunction
 
 
-function! Expect_Remove_On_Line(current_win_id, current_mark_spec, other_win_id, other_buffer_marks)
+function! s:expect_remove_On_Line(current_win_id, current_mark_spec, other_win_id, other_buffer_marks)
   let mark_spec = type(a:current_mark_spec) == v:t_dict ? items(a:current_mark_spec) : a:current_mark_spec
 
   call s:activate_win(a:current_win_id)
@@ -171,8 +157,8 @@ function! Expect_Remove_On_Line(current_win_id, current_mark_spec, other_win_id,
 endfunction
 
 
-function! Expect_Bundle(mark_spec)
-  let bundle = Call(s:Reg('func'), join(keys(a:mark_spec), ''))
+function! s:expect_bundle(mark_spec)
+  let bundle = Call(Get_Val('func'), join(keys(a:mark_spec), ''))
 
   Expect bundle !~? 'error'
 
@@ -188,9 +174,9 @@ function! Expect_Bundle(mark_spec)
 endfunction
 
 
-function! Expect_Bundle_Extract(mark_spec)
-  let bundle = Call(s:Reg('bundle_func'), join(keys(a:mark_spec), ''))
-  let result = Call(s:Reg('func'), bundle, 1)
+function! s:expect_bundle_Extract(mark_spec)
+  let bundle = Call(Get_Val('bundle_func'), join(keys(a:mark_spec), ''))
+  let result = Call(Get_Val('func'), bundle, 1)
 
   Expect len(result) == len(a:mark_spec)
 
@@ -204,11 +190,11 @@ endfunction
 describe 'specs_for_sign()'
 
   before
-    call s:StashGlobal(1)
+    call Save_Global()
   end
 
   after
-    call s:StashGlobal(0)
+    call Restore_Global()
     call s:purge_mark()
   end
 
@@ -238,11 +224,11 @@ end
 describe 'generate_name()'
 
   before
-    call s:Local(1)
+    call s:script_val.save()
   end
 
   after
-    call s:Local(0)
+    call s:script_val.restore()
     call s:purge_mark()
   end
 
@@ -250,21 +236,21 @@ describe 'generate_name()'
 
     it 'should return next character that is not used yet in a-z'
       call s:set_generic_mark('a')
-      call s:Local({'automarkables': 'abAB'})
+      call s:script_val.set({'automarkables': 'abAB'})
 
       Expect hlmarks#mark#generate_name(1) == 'b'
     end
 
     it 'should not return global marks(A-Z)'
       call s:set_generic_mark('b')
-      call s:Local({'automarkables': 'abAB'})
+      call s:script_val.set({'automarkables': 'abAB'})
 
       Expect hlmarks#mark#generate_name(1) == 'a'
     end
 
     it 'should return empty string if all marks are used'
       call s:set_generic_mark('ab')
-      call s:Local({'automarkables': 'abAB'})
+      call s:script_val.set({'automarkables': 'abAB'})
 
       Expect hlmarks#mark#generate_name(1) == ''
     end
@@ -275,21 +261,21 @@ describe 'generate_name()'
 
     it 'should return next character that is not used yet in A-Z'
       call s:set_generic_mark('A')
-      call s:Local({'automarkables': 'abAB'})
+      call s:script_val.set({'automarkables': 'abAB'})
 
       Expect hlmarks#mark#generate_name(0) == 'B'
     end
 
     it 'should not return local marks(a-z)'
       call s:set_generic_mark('B')
-      call s:Local({'automarkables': 'abAB'})
+      call s:script_val.set({'automarkables': 'abAB'})
 
       Expect hlmarks#mark#generate_name(0) == 'A'
     end
 
     it 'should return empty string if all marks are used'
       call s:set_generic_mark('AB')
-      call s:Local({'automarkables': 'abAB'})
+      call s:script_val.set({'automarkables': 'abAB'})
 
       Expect hlmarks#mark#generate_name(0) == ''
     end
@@ -302,7 +288,7 @@ describe 'generate_name()'
       call s:set_generic_mark('A')
       call s:activate_win(s:add_buffer())
       call s:set_generic_mark('B')
-      call s:Local({'automarkables': 'abABC'})
+      call s:script_val.set({'automarkables': 'abABC'})
 
       Expect hlmarks#mark#generate_name(0) == 'C'
     end
@@ -311,7 +297,7 @@ describe 'generate_name()'
       call s:set_generic_mark('B')
       call s:activate_win(s:add_buffer())
       call s:set_generic_mark('C')
-      call s:Local({'automarkables': 'abABC'})
+      call s:script_val.set({'automarkables': 'abABC'})
 
       Expect hlmarks#mark#generate_name(0) == 'A'
     end
@@ -320,7 +306,7 @@ describe 'generate_name()'
       call s:set_generic_mark('AB')
       call s:activate_win(s:add_buffer())
       call s:set_generic_mark('C')
-      call s:Local({'automarkables': 'abABC'})
+      call s:script_val.set({'automarkables': 'abABC'})
 
       Expect hlmarks#mark#generate_name(0) == ''
     end
@@ -382,12 +368,12 @@ end
 describe 'should_handle()'
 
   before
-    call s:Local(1)
-    call s:Local({'togglables': 'abc'})
+    call s:script_val.save()
+    call s:script_val.set({'togglables': 'abc'})
   end
 
   after
-    call s:Local(0)
+    call s:script_val.restore()
   end
 
   it 'should return true passed mark has correct length and is in predefined list'
@@ -490,7 +476,7 @@ describe 'remove()'
     call s:activate_win(other_win_id)
     call s:set_generic_mark(other_buffer_marks)
 
-    call Expect_Remove(current_win_id, current_buffer_marks, other_win_id, other_buffer_marks)
+    call s:expect_remove(current_win_id, current_buffer_marks, other_win_id, other_buffer_marks)
   end
 
   it 'should remove <,> marks'
@@ -503,7 +489,7 @@ describe 'remove()'
     call s:activate_win(other_win_id)
     call s:set_angle_brackets_mark(1)
 
-    call Expect_Remove(current_win_id, marks, other_win_id, marks)
+    call s:expect_remove(current_win_id, marks, other_win_id, marks)
   end
 
   it 'should remove ^,. marks'
@@ -516,7 +502,7 @@ describe 'remove()'
     call s:activate_win(other_win_id)
     call s:generate_automated_mark()
 
-    call Expect_Remove(current_win_id, marks, other_win_id, marks)
+    call s:expect_remove(current_win_id, marks, other_win_id, marks)
   end
 
   it 'should try to remove single-quote mark that is unable to remove without error'
@@ -536,7 +522,7 @@ describe 'remove()'
     call s:activate_win(other_win_id)
     call s:set_one_mark(mark)
 
-    call Expect_Remove(current_win_id, mark, other_win_id, mark)
+    call s:expect_remove(current_win_id, mark, other_win_id, mark)
   end
 
   it 'should remove [,] marks'
@@ -551,7 +537,7 @@ describe 'remove()'
     call s:activate_win(other_win_id)
     call s:set_generic_mark(marks)
 
-    call Expect_Remove(current_win_id, marks, other_win_id, marks)
+    call s:expect_remove(current_win_id, marks, other_win_id, marks)
   end
 
   it 'should try to remove invisible (,),{,} marks that are unable to remove without error'
@@ -581,7 +567,7 @@ describe 'remove_all()'
     call s:activate_win(other_win_id)
     call s:set_generic_mark(other_buffer_marks)
 
-    call Expect_Remove_All(current_win_id, current_buffer_marks, other_win_id, other_buffer_marks)
+    call s:expect_remove_All(current_win_id, current_buffer_marks, other_win_id, other_buffer_marks)
   end
 
   it 'should remove <,> marks in current buffer only'
@@ -594,7 +580,7 @@ describe 'remove_all()'
     call s:activate_win(other_win_id)
     call s:set_angle_brackets_mark(1)
 
-    call Expect_Remove_All(current_win_id, marks, other_win_id, marks)
+    call s:expect_remove_All(current_win_id, marks, other_win_id, marks)
   end
 
   it 'should remove ^,. marks in current buffer only'
@@ -607,7 +593,7 @@ describe 'remove_all()'
     call s:activate_win(other_win_id)
     call s:generate_automated_mark()
 
-    call Expect_Remove_All(current_win_id, marks, other_win_id, marks)
+    call s:expect_remove_All(current_win_id, marks, other_win_id, marks)
   end
 
   it 'should try to remove single-quote mark that is unable to remove without error'
@@ -627,7 +613,7 @@ describe 'remove_all()'
     call s:activate_win(other_win_id)
     call s:set_one_mark(mark)
 
-    call Expect_Remove_All(current_win_id, mark, other_win_id, mark)
+    call s:expect_remove_All(current_win_id, mark, other_win_id, mark)
   end
 
   it 'should remove [,] marks in current buffer only'
@@ -642,7 +628,7 @@ describe 'remove_all()'
     call s:activate_win(other_win_id)
     call s:set_generic_mark(marks)
 
-    call Expect_Remove_All(current_win_id, marks, other_win_id, marks)
+    call s:expect_remove_All(current_win_id, marks, other_win_id, marks)
   end
 
   it 'should try to remove invisible (,),{,} marks that are unable to remove without error'
@@ -671,7 +657,7 @@ describe 'remove_on_line()'
     call s:activate_win(other_win_id)
     call s:set_generic_mark(other_buffer_marks)
 
-    call Expect_Remove_On_Line(current_win_id, mark_spec, other_win_id, other_buffer_marks)
+    call s:expect_remove_On_Line(current_win_id, mark_spec, other_win_id, other_buffer_marks)
   end
 
   it 'should remove <,> marks in current buffer only'
@@ -685,7 +671,7 @@ describe 'remove_on_line()'
     call s:set_angle_brackets_mark(1)
 
     " Must remove right angle-brackets at first because it will change to left one if remove left one at first. 
-    call Expect_Remove_On_Line(current_win_id, [['>', mark_spec['>']], ['<', mark_spec['<']]], other_win_id, marks)
+    call s:expect_remove_On_Line(current_win_id, [['>', mark_spec['>']], ['<', mark_spec['<']]], other_win_id, marks)
   end
 
   it 'should remove ^,. marks in current buffer only'
@@ -698,7 +684,7 @@ describe 'remove_on_line()'
     call s:activate_win(other_win_id)
     call s:generate_automated_mark()
 
-    call Expect_Remove_On_Line(current_win_id, mark_spec, other_win_id, marks)
+    call s:expect_remove_On_Line(current_win_id, mark_spec, other_win_id, marks)
   end
 
   it 'should try to remove single-quote mark that is unable to remove without error'
@@ -718,7 +704,7 @@ describe 'remove_on_line()'
     call s:activate_win(other_win_id)
     call s:set_one_mark(mark)
 
-    call Expect_Remove_On_Line(current_win_id, [[mark, line_no]], other_win_id, mark)
+    call s:expect_remove_On_Line(current_win_id, [[mark, line_no]], other_win_id, mark)
   end
 
   it 'should remove [,] marks in current buffer only'
@@ -734,7 +720,7 @@ describe 'remove_on_line()'
       call s:activate_win(other_win_id)
       call s:set_one_mark(name)
 
-      call Expect_Remove_On_Line(current_win_id, [[name, line_no]], other_win_id, name)
+      call s:expect_remove_On_Line(current_win_id, [[name, line_no]], other_win_id, name)
     endfor
   end
 
@@ -791,13 +777,13 @@ end
 describe 's:bundle()'
 
   before
-    call s:Reg({
+    call Register_Val({
       \ 'func': 's:bundle',
       \ })
   end
 
   after
-    call s:Reg(0)
+    call Purge_Val()
     call s:purge_mark()
   end
 
@@ -812,31 +798,31 @@ describe 's:bundle()'
     call extend(mark_spec, s:set_generic_mark(other_buffer_marks))
     call s:activate_win(current_win_id)
 
-    call Expect_Bundle(mark_spec)
+    call s:expect_bundle(mark_spec)
   end
 
   it 'should return single chunk contains <,> marks information'
     let mark_spec = s:set_angle_brackets_mark(1)
 
-    call Expect_Bundle(mark_spec)
+    call s:expect_bundle(mark_spec)
   end
 
   it 'should return single chunk contains ^,. marks information'
     let mark_spec = s:generate_automated_mark()
 
-    call Expect_Bundle(mark_spec)
+    call s:expect_bundle(mark_spec)
   end
 
   it 'should return single chunk contains single-quote mark information'
     let mark_spec = {"'": s:set_one_mark("'")}
 
-    call Expect_Bundle(mark_spec)
+    call s:expect_bundle(mark_spec)
   end
 
   it 'should return single chunk contains " mark information'
     let mark_spec = {'"': s:set_one_mark('"')}
 
-    call Expect_Bundle(mark_spec)
+    call s:expect_bundle(mark_spec)
   end
 
   it 'should return single bundle contains [,] marks information'
@@ -847,14 +833,14 @@ describe 's:bundle()'
       let mark_spec = {}
       let mark_spec[name] = s:set_one_mark(name)
 
-      call Expect_Bundle(mark_spec)
+      call s:expect_bundle(mark_spec)
     endfor
   end
 
   it 'should return single chunk contains invisible marks information that normally cannot get by command'
     let mark_spec = s:set_invisible_mark()
 
-    call Expect_Bundle(mark_spec)
+    call s:expect_bundle(mark_spec)
   end
 
   it 'should return single bundle only contains marks in current buffer'
@@ -864,7 +850,7 @@ describe 's:bundle()'
     let mark_spec = s:set_generic_mark('a')
     call s:activate_win(current_win_id)
 
-    let bundle = Call(s:Reg('func'), 'a')
+    let bundle = Call(Get_Val('func'), 'a')
 
     Expect bundle !~# '\va\s+'.mark_spec['a'].'\D+'
   end
@@ -875,45 +861,45 @@ end
 describe 's:extract()'
 
   before
-    call s:Reg({
+    call Register_Val({
       \ 'func': 's:extract',
       \ 'bundle_func': 's:bundle',
       \ })
   end
 
   after
-    call s:Reg(0)
+    call Purge_Val()
     call s:purge_mark()
   end
 
   it 'should extract a-Z marks information from bundle'
     let mark_spec = s:set_generic_mark('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ')
 
-    call Expect_Bundle_Extract(mark_spec)
+    call s:expect_bundle_Extract(mark_spec)
   end
 
   it 'should extract <,> marks information from bundle'
     let mark_spec = s:set_angle_brackets_mark(1)
 
-    call Expect_Bundle_Extract(mark_spec)
+    call s:expect_bundle_Extract(mark_spec)
   end
 
   it 'should extract ^,. marks information from bundle'
     let mark_spec = s:generate_automated_mark()
 
-    call Expect_Bundle_Extract(mark_spec)
+    call s:expect_bundle_Extract(mark_spec)
   end
 
   it 'should extract sigle-quote mark information from bundle'
     let mark_spec = {"'": s:set_one_mark("'")}
 
-    call Expect_Bundle_Extract(mark_spec)
+    call s:expect_bundle_Extract(mark_spec)
   end
 
   it 'should extract " mark information from bundle'
     let mark_spec = {'"': s:set_one_mark('"')}
 
-    call Expect_Bundle_Extract(mark_spec)
+    call s:expect_bundle_Extract(mark_spec)
   end
 
   it 'should extract [,] marks information from bundle'
@@ -924,14 +910,14 @@ describe 's:extract()'
       let mark_spec = {}
       let mark_spec[name] = s:set_one_mark(name)
 
-      call Expect_Bundle_Extract(mark_spec)
+      call s:expect_bundle_Extract(mark_spec)
     endfor
   end
 
   it 'should extract invisible marks information from bundle'
     let mark_spec = s:set_invisible_mark()
 
-    call Expect_Bundle_Extract(mark_spec)
+    call s:expect_bundle_Extract(mark_spec)
   end
 
   it 'should extract except global mark in other buffer'
@@ -941,15 +927,15 @@ describe 's:extract()'
     let mark_spec = s:set_generic_mark('A')
     call s:activate_win(current_win_id)
 
-    let bundle = Call(s:Reg('bundle_func'), 'A')
-    let result = Call(s:Reg('func'), bundle, 0)
+    let bundle = Call(Get_Val('bundle_func'), 'A')
+    let result = Call(Get_Val('func'), bundle, 0)
 
     Expect result == {}
   end
 
   it 'should return empty dict if has no mark'
-    let bundle = Call(s:Reg('bundle_func'), 'aA')
-    let result = Call(s:Reg('func'), bundle, 1)
+    let bundle = Call(Get_Val('bundle_func'), 'aA')
+    let result = Call(Get_Val('func'), bundle, 1)
 
     Expect result == {}
   end

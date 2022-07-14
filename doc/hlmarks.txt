@@ -336,9 +336,11 @@ The following installations are required for testing and debugging.
     - vim-vspec (https://github.com/kana/vim-vspec)
     - rake (ruby)
 
-For vim-vspec, create a directory named "vendor" and copy the repository of
-vim-vspec into it.
+For vim-spec, extract into the vendor/vim-vspec directory. >
 
+    mkdir -p vender/vim-vspec
+    git clone https://github.com/kana/vim-vspec.git vendor/vim-vspec
+<
 To run the test, execute the following command in the directory where the
 Rakefile is located. >
 
@@ -354,6 +356,9 @@ For the format of the help file, referring to the following project.
 ==============================================================================
 CHANGELOG                                                  *hlmarks-changelog*
 
+2022/07/14  version 0.7.1~
+    + Update test.
+    + Update help.
 2022/07/12  version 0.7.0~
     + Update vim-vspec.
     + Remove gem dependency for test.
