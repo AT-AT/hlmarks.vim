@@ -1,19 +1,9 @@
 execute 'source ' . expand('%:p:h') . '/t/_common/test_helpers.vim'
+execute 'source ' . expand('%:p:h') . '/t/_common/local_helpers.vim'
 
 runtime! plugin/hlmarks.vim
 
 call vspec#hint({'scope': 'hlmarks#cache#scope()', 'sid': 'hlmarks#cache#sid()'})
-
-
-
-function! s:Reg(subject)
-  return _Reg_('__t__', a:subject)
-endfunction
-
-
-function! s:Local(subject)
-  return _HandleLocalDict_('s:cache', a:subject)
-endfunction
 
 
 
@@ -49,7 +39,7 @@ end
 describe 's:getbufvar'
 
   before
-    call s:Reg({
+    call Register_Val({
       \ 'func': 's:getbufvar',
       \ })
 
@@ -59,12 +49,12 @@ describe 's:getbufvar'
   after
     close!
 
-    call s:Reg(0)
+    call Purge_Val()
   end
 
   it 'should return fallback value if designated variable is not in buffer'
     let fallback = 'fallback'
-    let result = Call(s:Reg('func'), '%', '_never_cached_value_', fallback)
+    let result = Call(Get_Val('func'), '%', '_never_cached_value_', fallback)
 
     Expect result == fallback
   end
@@ -73,7 +63,7 @@ describe 's:getbufvar'
     let key = 'test_hlmarks_cache'
     let value = {'foo': 'bar', 'baz': ['qux']}
     call setbufvar('%', key, value)
-    let result = Call(s:Reg('func'), '%', key, 'fallback')
+    let result = Call(Get_Val('func'), '%', key, 'fallback')
 
     Expect result == value
   end

@@ -5,22 +5,8 @@ runtime! plugin/hlmarks.vim
 
 call vspec#hint({'scope': 'hlmarks#scope()', 'sid': 'hlmarks#sid()'})
 
+let s:script_val = Create_Script_Val_Handler('s:plugin')
 
-
-function! s:Reg(subject)
-  return _Reg_('__t__', a:subject)
-endfunction
-
-
-function! s:StashGlobal(subject)
-  let subject = a:subject != 0 ? 'hlmarks_' : 0
-  call _Stash_(subject)
-endfunction
-
-
-function! s:Local(subject)
-  return _HandleLocalDict_('s:plugin', a:subject)
-endfunction
 
 
 function! s:expect_usercmd(cmds, prefix)
@@ -174,12 +160,12 @@ describe 'Hlmarks'
     end
 
     it 'should have inactive state'
-      call s:Local(1)
-      let local = s:Local('')
+      call s:script_val.save()
+      let local = s:script_val.get('')
 
       Expect local.is_active() to_be_false
 
-      call s:Local(0)
+      call s:script_val.restore()
     end
 
   end
@@ -197,16 +183,16 @@ describe 'Hlmarks'
     end
 
     it 'should have active state'
-      call s:Local(1)
-      let local = s:Local('')
+      call s:script_val.save()
+      let local = s:script_val.get('')
 
       Expect local.is_active() to_be_true
 
-      call s:Local(0)
+      call s:script_val.restore()
     end
 
     it 'should preserve some global variables'
-      let repo = s:Local('preserved')
+      let repo = s:script_val.get('preserved')
       let target = keys(repo)
 
       for name in target
@@ -254,12 +240,12 @@ describe 'Hlmarks'
     end
 
     it 'should have inactive state'
-      call s:Local(1)
-      let local = s:Local('')
+      call s:script_val.save()
+      let local = s:script_val.get('')
 
       Expect local.is_active() to_be_false
 
-      call s:Local(0)
+      call s:script_val.restore()
     end
 
     it 'should remove autocmd'
@@ -292,13 +278,13 @@ describe 'Hlmarks'
   context 'when plugin is reloaded'
 
     before
-      call s:StashGlobal(1)
-      call s:Local(1)
+      call Save_Global()
+      call s:script_val.save()
     end
 
     after
-      call s:StashGlobal(0)
-      call s:Local(0)
+      call Restore_Global()
+      call s:script_val.restore()
       delm!
     end
 
@@ -325,7 +311,7 @@ describe 'Hlmarks'
       call Expect_Sign(['HighlightMarks_a'], 1, 0)
       call Expect_Sign(['HighlightMarks_b'], 1, 1)
 
-      let preserved = s:Local('preserved')
+      let preserved = s:script_val.get('preserved')
 
       " Default prefix is 'Leader', it's presented as '\' in command result.
       call s:expect_keymap(1, '\', preserved['hlmarks_alias_native_mark_cmd'])
@@ -345,11 +331,11 @@ describe 'Display Utility'
   context 'refresh_signs()'
 
     before
-      call s:StashGlobal(1)
+      call Save_Global()
     end
 
     after
-      call s:StashGlobal(0)
+      call Restore_Global()
       delm!
     end
 
@@ -459,31 +445,31 @@ end
 describe 'Private helper'
 
   before
-    call s:Local(1)
+    call s:script_val.save()
   end
 
   after
-    call s:Local(0)
+    call s:script_val.restore()
   end
 
   context 's:plugin.activate()'
 
     it 'should activate plugin state'
-      call s:Local({'activated': 999})
-      let local = s:Local('')
+      call s:script_val.set({'activated': 999})
+      let local = s:script_val.get('')
 
       call local.activate()
-      let state = s:Local('activated')
+      let state = s:script_val.get('activated')
 
       Expect state == 1
     end
 
     it 'should inactivate plugin state'
-      call s:Local({'activated': 999})
-      let local = s:Local('')
+      call s:script_val.set({'activated': 999})
+      let local = s:script_val.get('')
 
       call local.inactivate()
-      let state = s:Local('activated')
+      let state = s:script_val.get('activated')
 
       Expect state == 0
     end

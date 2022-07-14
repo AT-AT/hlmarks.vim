@@ -1,4 +1,62 @@
 "
+" Preserve/Restore global variables related this plugin.
+"
+function! Save_Global()
+  call _Stash_('hlmarks_')
+endfunction
+
+function! Restore_Global()
+  call _Stash_(0)
+endfunction
+
+"
+" Handle a value using specified global variable.
+"
+function! Register_Val(dict)
+  return _Reg_('__t__', a:dict)
+endfunction
+
+function! Get_Val(key)
+  return _Reg_('__t__', a:key)
+endfunction
+
+function! Purge_Val()
+  return _Reg_('__t__', 0)
+endfunction
+
+"
+" Handle script local variables in the test target.
+"
+let s:script_val_handler = {'name': ''}
+
+function! s:script_val_handler.id(name)
+  let self.name = a:name
+endfunction
+
+function! s:script_val_handler.save()
+  call _HandleLocalDict_(self.name, 1)
+endfunction
+
+function! s:script_val_handler.restore()
+  call _HandleLocalDict_(self.name, 0)
+endfunction
+
+function! s:script_val_handler.set(dict)
+  call _HandleLocalDict_(self.name, a:dict)
+endfunction
+
+function! s:script_val_handler.get(key)
+  return _HandleLocalDict_(self.name, a:key)
+endfunction
+
+function! Create_Script_Val_Handler(name)
+  let handler = deepcopy(s:script_val_handler, 1)
+  call handler.id(a:name)
+
+  return handler
+endfunction
+
+"
 " Check mark existence.
 "
 function! Expect_Mark(marks, should_present)

@@ -105,7 +105,7 @@ function! _HandleLocalDict_(value_name, subject, ...)
 endfunction
 
 "
-" Register/Refer/Remove global variable with prefix.
+" Register/Refer/Remove values in a dictinary using global variable.
 "
 " Param:  [String] prefix: strings that prepend to variable name
 " Param:  [Dict, String, 0] subject: see below
